@@ -99,11 +99,14 @@ impl Debug for Card {
 }
 
 // initialise the main deck of cards
-fn new_deck() -> Vec<Card> {
-    let mut deck = vec![
-        Card(CardColor::Nop, CardType::Joker),
-        Card(CardColor::Nop, CardType::Joker),
-    ];
+fn new_deck(joker: bool) -> Vec<Card> {
+    let mut deck = vec![];
+
+    // Jokers
+    if joker {
+        deck.push(Card(CardColor::Nop, CardType::Joker));
+        deck.push(Card(CardColor::Nop, CardType::Joker));
+    }
 
     for color in [
         CardColor::Spades,
@@ -128,19 +131,107 @@ fn new_deck() -> Vec<Card> {
     deck
 }
 
-fn shuffle_deck(deck: &mut Vec<Card>) {
+fn shuffle_deck(deck: &mut [Card]) {
     let mut r = rand::rng();
     deck.shuffle(&mut r);
 }
 
+#[derive(Debug, Clone)]
+struct Game {
+    player1: VecDeque<Card>,
+    player2: VecDeque<Card>,
+}
+
+impl Game {
+    fn new() -> Game {
+        let mut deck = new_deck(true);
+        shuffle_deck(&mut deck);
+
+        // create two players with empty hands of 52 cards
+        let mut player1: VecDeque<Card> = VecDeque::with_capacity(deck.len());
+        let mut player2: VecDeque<Card> = VecDeque::with_capacity(deck.len());
+
+        // repartion
+        for _ in 0..(deck.len() / 2) {
+            player1.push_back(deck.pop().unwrap());
+            player2.push_back(deck.pop().unwrap());
+        }
+
+        Game { player1, player2 }
+    }
+}
+
+impl Iterator for Game {
+    type Item = (usize, usize);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        // if one of the player can not continue
+        if self.player1.is_empty() || self.player2.is_empty() {
+            return None;
+        }
+
+        // so we can unwrap safely
+        let card_a = self.player1.pop_front().unwrap();
+        let card_b = self.player2.pop_front().unwrap();
+
+        // when a player win he get his card THEN the other's player card
+        if card_a < card_b {
+            self.player2.push_back(card_b);
+            self.player2.push_back(card_a);
+        } else if card_a > card_b {
+            self.player1.push_back(card_a);
+            self.player1.push_back(card_b);
+        } else {
+            // case of a battle
+            let mut tmp_player1: VecDeque<Card> = VecDeque::new();
+            let mut tmp_player2: VecDeque<Card> = VecDeque::new();
+
+            tmp_player1.push_back(card_a);
+            tmp_player2.push_back(card_b);
+
+            loop {
+                if self.player1.len() < 2 || self.player2.len() < 2 {
+                    return None;
+                }
+
+                // each player put one card face down
+                tmp_player1.push_back(self.player1.pop_front().unwrap());
+                tmp_player2.push_back(self.player2.pop_front().unwrap());
+
+                // each player put one card face up
+                let card_a = self.player1.pop_front().unwrap();
+                let card_b = self.player2.pop_front().unwrap();
+
+                tmp_player1.push_back(card_a);
+                tmp_player2.push_back(card_b);
+
+                if card_a < card_b {
+                    self.player2.extend(tmp_player2);
+                    self.player2.extend(tmp_player1);
+                    break;
+                } else if card_a > card_b {
+                    self.player1.extend(tmp_player1);
+                    self.player1.extend(tmp_player2);
+                    break;
+                }
+            }
+        }
+
+        Some((self.player1.len(), self.player2.len()))
+    }
+}
+
 fn main() {
     // initialise the deck
-    let mut main_deck = new_deck();
-    shuffle_deck(&mut main_deck);
+    let game = Game::new();
 
-    println!("{:?} {}", main_deck, main_deck.len());
+    println!("Init :\n{:?}", game);
 
-    // create two players with empty hands of 52 cards
-    let mut player1: VecDeque<Card> = VecDeque::new();
-    let mut player2: VecDeque<Card> = VecDeque::new();
+    let mut n = 0;
+    game.for_each(|(p1, p2)| {
+        println!("p1 {}, p2 {}", p1, p2);
+        n += 1
+    });
+
+    println!("Length of the game = {}", n);
 }
